@@ -4,6 +4,11 @@
   * Like all Arduino code - copied from somewhere else :)
   * So don't claim it as your own
   */
+
+
+
+
+
   
 ////////////////// User Settings /////////////////////////  
   #include <Servo.h>
@@ -50,7 +55,9 @@
    #define AutosteerLED_PIN 2         // PD2 light on active autosteer and IBT2 h1
    #define SERVO_PIN 3                // PD3 Servo PIN
    const int SERVO_POS_ON = 20;       //Postion 1 des Servos, Werte für min. max. Winkel hängen vom Servo ab Werte ab 10 bis 160
-   const int SERVO_POS_OFF = 140;     //Postion 2 des Servos, Werte für min. max. Winkel hängen vom Servo ab Werte ab 10 bis 160
+   const int SERVO_POS_OFF = 150;     //Postion 2 des Servos, Werte für min. max. Winkel hängen vom Servo ab Werte ab 10 bis 160
+   int SERVO_DELAY = 40;
+   int SERVO_START = 0;
    
   //Define sensor pin for current or pressure sensor
   #define ANALOG_SENSOR_PIN A0
@@ -186,12 +193,13 @@
     }
     
     //keep pulled high and drag low to activate, noise free safe   
-    pinMode(WORKSW_PIN, INPUT_PULLUP); 
+    pinMode(WORKSW_PIN, INPUT); 
     pinMode(STEERSW_PIN, INPUT_PULLUP); 
     pinMode(REMOTE_PIN, INPUT_PULLUP); 
     pinMode(DIR1_RL_ENABLE, OUTPUT);
     
     Steerservo.attach(SERVO_PIN);         //setzt das Servo-PIN auf PIN 3
+    
     
     if (steerConfig.CytronDriver) pinMode(PWM2_RPWM, OUTPUT); 
     
@@ -441,8 +449,30 @@
       //Ackerman fix
       if (steerAngleActual < 0) steerAngleActual = (steerAngleActual * steerSettings.AckermanFix);
       
-      if (watchdogTimer < WATCHDOG_THRESHOLD)
-      {
+     if (watchdogTimer < WATCHDOG_THRESHOLD)
+        {    
+          if (SERVO_START < SERVO_DELAY)
+            {
+             if (SERVO_START == 0)
+                {
+                  digitalWrite(AutosteerLED_PIN, HIGH); //schaltet LED "ein" h1
+                  Steerservo.write(SERVO_POS_ON);       //schwenkt Servo in die "Ein-Position"
+                  SERVO_START++;         //startet Delayzähler
+                  //Serial.println("Servo schaltet ein");
+                  //Serial.print(SERVO_START);
+                }
+        
+                else 
+                {
+                SERVO_START++;        //erhöht Delayzähler
+                //Serial.println("Servo_Start zählt hoch");
+                //Serial.print(SERVO_START);
+                }
+             
+        
+            }
+          else
+            {
        //Enable H Bridge for IBT2, hyd aux, etc for cytron
         if (steerConfig.CytronDriver) 
         {
@@ -455,23 +485,29 @@
             digitalWrite(PWM2_RPWM, 1);       
           }          
         }
-        else digitalWrite(DIR1_RL_ENABLE, 1);     
+      
+      
+        else 
+        
+          digitalWrite(DIR1_RL_ENABLE, 1);     
         
         steerAngleError = steerAngleActual - steerAngleSetPoint;   //calculate the steering error
         //if (abs(steerAngleError)< steerSettings.lowPWM) steerAngleError = 0;
-
-             digitalWrite(AutosteerLED_PIN, HIGH); //schaltet LED "ein" h1
-             Steerservo.write(SERVO_POS_ON);      
-             // delay(50);
-             
+          
         calcSteeringPID();  //do the pid
         motorDrive();       //out to motors the pwm value
-      }
+         
+  	      }
+        }
     else
       {
         
         //we've lost the comm to AgOpenGPS, or just stop request
         //Disable H Bridge for IBT2, hyd aux, etc for cytron
+        digitalWrite(AutosteerLED_PIN, LOW);  // schaltet LED "aus" h1   
+        Steerservo.write(SERVO_POS_OFF);        // max Winkel hängt vom Servo ab, Werte ab 165
+        SERVO_START = 0;
+        
         if (steerConfig.CytronDriver) 
         {
           if (steerConfig.IsRelayActiveHigh) 
@@ -485,13 +521,8 @@
         }
         else digitalWrite(DIR1_RL_ENABLE, 0); //IBT2
 
-        digitalWrite(AutosteerLED_PIN, LOW);  // schaltet LED "aus" h1   
-           
-              
-               Steerservo.write(SERVO_POS_OFF);        // max Winkel hängt vom Servo ab, Werte ab 165
-               //delay(50);
-              
-               
+        
+                         
         pwmDrive = 0; //turn off steering motor
         motorDrive(); //out to motors the pwm value
         pulseCount=0;
